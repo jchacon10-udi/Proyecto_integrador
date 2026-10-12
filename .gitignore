@@ -1,0 +1,14 @@
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+~$*
+*.asta.bak
