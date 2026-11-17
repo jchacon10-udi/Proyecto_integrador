@@ -1,73 +1,60 @@
+"""Capa HTTP: sesión, códigos de estado y formato de los errores."""
 import pytest
 from fastapi.testclient import TestClient
 
-def client():
-    from app.main import create_app
-    return TestClient(create_app())
+from app.main import create_app
 
-def login(c, user="informante"):
-    r=c.post("/api/demo/login",json={"usuario":user,"password":"enph-demo"})
-    assert r.status_code==200
-    return {"Authorization":"Bearer "+r.json()["token"]}
 
-def data(**changes):
-    return dict(numero_orden=1,descripcion="Servicio ficticio",cantidad="1",tipo_item="SERVICIO",unidad_id=None,forma_id=3,valor="3200.25",tipo_gasto="NA") | changes
+@pytest.fixture
+def api(s):
+    return TestClient(create_app("memoria", servicios=s))
 
-def test_no_session_or_wrong_credentials():
-    c=client()
-    assert c.get("/api/context").status_code==401
-    assert c.post("/api/demo/login",json={"usuario":"informante","password":"wrong"}).status_code==401
-    assert c.get("/api/context",headers={"Authorization":"Bearer forged"}).status_code==401
 
-@pytest.mark.parametrize("user,role", [("informante","Informante del hogar"),("encuestador","Encuestador"),("supervisor","Supervisor"),("critico","Crítico-digitador")])
-def test_four_roles_are_derived_from_session(user,role):
-    c=client();h=login(c,user);r=c.get("/api/context",headers=h)
-    assert r.status_code==200 and r.json()["rol"]==role and r.json()["mode"]=="demo"
+def entrar(api, usuario):
+    r = api.post("/api/sesion", json={"usuario": usuario, "clave": "enph-demo"})
+    assert r.status_code == 200
+    return {"Authorization": f"Bearer {r.json()['token']}"}
 
-def test_complete_crud_over_http():
-    c=client();h=login(c);url="/api/hogares/1/jornadas/6/gastos"
-    r=c.post(url,headers=h,json=data());assert r.status_code==201
-    g=r.json();assert g["valor"]=="3200.25" and g["tipo_gasto"]=="NA" and g["unidad_id"] is None
-    assert c.get(url,headers=h).json()==[g]
-    r=c.put(f"/api/gastos/{g['id']}",headers=h,json=data(valor="5000.10"));assert r.status_code==200 and r.json()["valor"]=="5000.10"
-    assert c.delete(f"/api/gastos/{g['id']}",headers=h).status_code==204
-    assert c.get(url,headers=h).json()==[]
 
-@pytest.mark.parametrize("user", ["encuestador","supervisor","critico"])
-def test_other_roles_are_read_only_in_this_vertical(user):
-    c=client();h=login(c,user);url="/api/hogares/1/jornadas/6/gastos"
-    assert c.get(url,headers=h).status_code==200
-    assert c.post(url,headers=h,json=data()).status_code==403
+def test_sesion(api):
+    assert api.get("/api/hogares").status_code == 401
+    assert api.post("/api/sesion", json={"usuario": "pruiz", "clave": "x"}).status_code == 401
+    cab = entrar(api, "pruiz")
+    assert api.get("/api/sesion", headers=cab).json()["usuario"]["rol"] == "INFORMANTE"
+    assert api.delete("/api/sesion", headers=cab).status_code == 204
+    assert api.get("/api/sesion", headers=cab).status_code == 401
 
-def test_foreign_household_denied():
-    c=client();h=login(c)
-    assert c.post("/api/hogares/2/jornadas/26/gastos",headers=h,json=data()).status_code==403
-    assert c.get("/api/hogares/2/jornadas/26/gastos",headers=h).status_code==403
 
-@pytest.mark.parametrize("changes",[{"rol":"Supervisor"},{"hogar_id":2},{"tipo_gasto":""},{"tipo_item":"BIEN"},{"cantidad":"NaN"},{"numero_orden":True},{"cantidad":"1.001"}])
-def test_bad_payload_422_and_no_write(changes):
-    c=client();h=login(c);url="/api/hogares/1/jornadas/6/gastos"
-    assert c.post(url,headers=h,json=data(**changes)).status_code==422
-    assert c.get(url,headers=h).json()==[]
+def test_flujo_http_de_captura(api, h):
+    cab = entrar(api, "jgomez")
+    gasto = {"descripcion": "Arroz", "tipo_item": "BIEN", "cantidad": "1", "cod_unidad": "5", "cod_forma": "1",
+             "cod_lugar": "6", "valor_pagado": "2500", "cod_frecuencia": "3", "tipo_gasto": "1"}
+    r = api.post(f"/api/hogares/{h[2]}/dias/5/gastos", json=gasto, headers=cab)
+    assert r.status_code == 201 and r.json()["numero_orden"] == 3
+    dia = api.get(f"/api/hogares/{h[2]}/dias/5", headers=cab).json()
+    assert len(dia["gastos"]) == 3 and dia["jornada"]["fecha"] == "2026-10-31"
 
-def test_duplicate_returns409_and_missing_record404():
-    c=client();h=login(c);url="/api/hogares/1/jornadas/6/gastos"
-    assert c.post(url,headers=h,json=data()).status_code==201
-    assert c.post(url,headers=h,json=data(valor="999")).status_code==409
-    assert len(c.get(url,headers=h).json())==1
-    assert c.delete("/api/gastos/999",headers=h).status_code==404
+    r = api.post(f"/api/hogares/{h[2]}/dias/8/gastos", json={**gasto, "tipo_gasto": "2"}, headers=cab)
+    assert r.status_code == 422 and r.json()["codigo"] == "ORA-02290" and "CK_GD_PERSONAL_7" in r.json()["detail"]
+    r = api.post(f"/api/hogares/{h[2]}/dias/5/gastos", json={**gasto, "cantidad": "-1"}, headers=cab)
+    assert r.status_code == 422 and r.json()["codigo"] == "VALIDACION"
+    r = api.put(f"/api/hogares/{h[2]}/dias/5/gastos/1", json=gasto, headers=cab)
+    assert r.status_code == 403
 
-def test_oracle_mode_fails_closed():
-    from app.main import create_app
-    with pytest.raises(RuntimeError,match="Oracle"):create_app(mode="oracle")
 
-def test_expired_session_cannot_access():
-    from app.auth import AuthService
-    now=[0.0];a=AuthService(clock=lambda:now[0]);token=a.login("informante","enph-demo")
-    now[0]=1201
-    with pytest.raises(PermissionError):a.resolve(token)
+def test_conflicto_y_no_encontrado(api, h):
+    cab = entrar(api, "pruiz")
+    gasto = {"descripcion": "Pan", "tipo_item": "BIEN", "cantidad": "1", "cod_unidad": "5", "cod_forma": "1",
+             "valor_pagado": "1000", "cod_frecuencia": "2", "tipo_gasto": "1"}
+    r = api.post(f"/api/hogares/{h[1]}/dias/6/gastos", json=gasto, headers=cab)
+    assert r.status_code == 409 and r.json()["codigo"] == "ORA-20010"
+    assert api.get("/api/hogares/999999/avance", headers=cab).status_code == 404
 
-def test_each_app_has_independent_fixtures():
-    c=client();h=login(c);url="/api/hogares/1/jornadas/6/gastos"
-    assert c.post(url,headers=h,json=data()).status_code==201
-    fresh=client();assert fresh.get(url,headers=login(fresh)).json()==[]
+
+def test_supervisor_y_reportes(api, h):
+    cab = entrar(api, "mlopez")
+    assert len(api.get("/api/hogares", headers=cab).json()) == 3
+    caso = api.get(f"/api/hogares/{h[2]}/revision-caso", headers=cab).json()
+    assert not caso["puede_aprobar"]
+    assert api.get("/api/reportes/carga_encuestador", headers=cab).json()[0]["hogares"] == 3
+    assert api.get("/api/catalogos", headers=cab).json()["grupo_alimento"][0]["codigo"] == "01"
