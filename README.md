@@ -9,6 +9,7 @@ Arquitectura cliente-servidor con persistencia en Oracle:
 | `Codigo/backend` | API REST en Python (FastAPI): casos de uso CU-01 a CU-14, reglas de negocio y repositorios en memoria y Oracle |
 | `Codigo/frontend` | Cliente web en React + TypeScript para los cuatro roles |
 | `BaseDeDatos` | Scripts Oracle 10g: tablas, secuencias, disparadores, funciones, procedimientos, vistas, roles, datos y pruebas |
+| `Oracle10g` | Instalación de Oracle Instant Client 11.2 (Windows y macOS) para conectar el backend al servidor Oracle 10g |
 
 ## Base de datos
 
@@ -20,7 +21,7 @@ sqlplus system/<clave>@<servicio> @00_crear_esquema_DBA.sql
 sqlplus ENPH/<clave>@<servicio> @instalar.sql
 ```
 
-`instalar.sql` genera `instalacion.log` y `pruebas.log`; el resultado esperado es `38 pasan, 0 fallan`. Las contraseñas de `00_crear_esquema_DBA.sql` son de laboratorio: cámbielas en cualquier servidor compartido.
+`instalar.sql` genera `instalacion.log` y `pruebas.log`; el resultado esperado es `38 pasan, 0 fallan`. `00_crear_esquema_DBA.sql` pide las contraseñas de los usuarios al ejecutarse y no las guarda.
 
 ## Backend
 
@@ -37,6 +38,17 @@ Modo de datos por variables de entorno (ver `Codigo/backend/.env.example`):
 
 - `ENPH_MODO=memoria` (por defecto): datos de prueba en memoria, equivalentes a `08_datos_prueba.sql`.
 - `ENPH_MODO=oracle`: esquema ENPH. Variables `ORACLE_DSN`, `ORACLE_USUARIO` (ENPH_APP), `ORACLE_CLAVE`. Para Oracle 10g se requiere el modo thick: `ORACLE_CLIENTE` con la ruta de Oracle Instant Client 11.2.
+
+### Servidor Oracle 10g de la universidad
+
+Oracle 10g solo acepta el modo *thick* de python-oracledb con **Oracle Instant Client 11.2**, disponible para Windows x64, macOS (Intel, y Apple Silicon con Rosetta 2) y Linux x86_64. Oracle no publica instalador: el cliente es un `.zip` que se descarga con una cuenta gratuita de Oracle. Los scripts de [`Oracle10g/`](Oracle10g/LEEME.md) lo instalan, generan `.env` y prueban la conexión:
+
+```
+powershell -ExecutionPolicy Bypass -File Oracle10g\instalar_cliente_windows.ps1   # Windows
+bash Oracle10g/instalar_cliente_macos.sh                                         # macOS
+```
+
+`python probar_conexion.py` (en `Codigo/backend`) verifica la conexión en cualquier momento. Instrucciones completas y errores frecuentes en [`Oracle10g/LEEME.md`](Oracle10g/LEEME.md).
 
 Pruebas: `.venv/bin/python -m pytest`. Contra Oracle: agregar `ENPH_PRUEBAS_ORACLE=1` y las variables `ORACLE_*`; cada prueba se revierte al terminar.
 

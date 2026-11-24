@@ -12,3 +12,5 @@ dist/
 .DS_Store
 ~$*
 *.asta.bak
+.venv-x86/
+instantclient_*/
