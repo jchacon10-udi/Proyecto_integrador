@@ -80,4 +80,5 @@ arch -x86_64 .venv-x86/bin/uvicorn app.main:create_app --factory --port 8000
 | `ORA-12170` / `ORA-12541` | No hay red hacia el servidor: confirme la conexión a la red de la universidad. |
 | `ORA-12505` | El SID no es `orcl`: pregunte el SID o use el alias TNS del laboratorio. |
 | `ORA-01017` | Usuario o contraseña incorrectos. |
+| macOS: `Failed building wheel for cryptography` | Versión vieja del script: actualice el repositorio (`git pull`). El script instala `cryptography<49`, la última con paquete x86_64. |
 | `ORA-00942` al iniciar el backend | El usuario no ve los objetos de ENPH: ejecute `BaseDeDatos/07_roles_privilegios.sql` o conéctese como `ENPH`. |

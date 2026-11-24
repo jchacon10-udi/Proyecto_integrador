@@ -67,7 +67,10 @@ fi
 cd "$BACKEND"
 [ -x .venv-x86/bin/python ] || $X86 "$PY_REAL" -m venv .venv-x86
 $X86 .venv-x86/bin/python -m pip install --quiet --upgrade pip
-$X86 .venv-x86/bin/python -m pip install --quiet -e ".[test]"
+# cryptography (dependencia de oracledb) dejó de publicar paquetes x86_64 para macOS en la versión 49;
+# sin esta restricción pip intenta compilarla con Rust y falla bajo Rosetta.
+$X86 .venv-x86/bin/python -m pip install --quiet --only-binary=:all: "cryptography<49"
+$X86 .venv-x86/bin/python -m pip install --quiet --only-binary=cryptography -e ".[test]"
 
 # 4. Archivo .env ----------------------------------------------------------------------------------
 paso "Configuración (.env)"
