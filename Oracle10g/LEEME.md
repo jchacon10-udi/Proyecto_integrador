@@ -59,11 +59,13 @@ Si en el servidor solo existe el usuario dueño `ENPH`, use `-Usuario ENPH` (Win
 **macOS Apple Silicon.** Oracle no publicó Instant Client 11.2 para arm64. El script:
 - Usa la versión Intel con Rosetta 2.
 - Crea un entorno virtual aparte, `Codigo/backend/.venv-x86`, con Python x86_64; el Python universal de python.org sirve.
-- Enlaza las bibliotecas en `~/lib`, donde macOS las busca.
 
-El backend se inicia con:
+- Quita la cuarentena de macOS a las bibliotecas.
+- Reescribe las rutas internas de compilación de Oracle (`/ade/...`) para que cada biblioteca encuentre sus dependencias en su propia carpeta.
+
+El cliente 11.2 busca `libociei.dylib` (zonas horarias) solo por nombre, así que el backend necesita la variable `DYLD_FALLBACK_LIBRARY_PATH`. El lanzador la define:
 ```
-arch -x86_64 .venv-x86/bin/uvicorn app.main:create_app --factory --port 8000
+bash Oracle10g/iniciar_backend_macos.sh
 ```
 
 **Linux.**
@@ -80,5 +82,7 @@ arch -x86_64 .venv-x86/bin/uvicorn app.main:create_app --factory --port 8000
 | `ORA-12170` / `ORA-12541` | No hay red hacia el servidor: confirme la conexión a la red de la universidad. |
 | `ORA-12505` | El SID no es `orcl`: pregunte el SID o use el alias TNS del laboratorio. |
 | `ORA-01017` | Usuario o contraseña incorrectos. |
+| macOS: «No se abrió libclntsh.dylib.11.1» | Pulse **Listo** (no «Mover al basurero») y vuelva a ejecutar el script: quita la cuarentena. |
+| macOS: `ORA-01804` | El backend se inició sin `DYLD_FALLBACK_LIBRARY_PATH`: use `Oracle10g/iniciar_backend_macos.sh`. |
 | macOS: `Failed building wheel for cryptography` | Versión vieja del script: actualice el repositorio (`git pull`). El script instala `cryptography<49`, la última con paquete x86_64. |
 | `ORA-00942` al iniciar el backend | El usuario no ve los objetos de ENPH: ejecute `BaseDeDatos/07_roles_privilegios.sql` o conéctese como `ENPH`. |

@@ -47,13 +47,23 @@ if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
 fi
 mkdir -p "$DESTINO"
 unzip -oq "$ZIP" -d "$DESTINO"
-xattr -dr com.apple.quarantine "$CLIENTE" 2>/dev/null || true
+# Los archivos vienen de solo lectura: sin permiso de escritura no se puede quitar la cuarentena
+# y macOS muestra "No se abrió libclntsh.dylib.11.1".
+chmod -R u+w "$CLIENTE"
+xattr -dr com.apple.quarantine "$CLIENTE"
 cd "$CLIENTE"
 ln -sf libclntsh.dylib.11.1 libclntsh.dylib
 ln -sf libocci.dylib.11.1 libocci.dylib
-# Las bibliotecas 11.2 de macOS buscan sus dependencias por nombre; dyld las encuentra en ~/lib.
-mkdir -p "$HOME/lib"
-for f in "$CLIENTE"/*.dylib*; do ln -sf "$f" "$HOME/lib/"; done
+# Las bibliotecas 11.2 de macOS referencian rutas de compilación de Oracle (/ade/...).
+# Se reescriben para que cada una busque sus dependencias en su misma carpeta.
+for f in *.dylib* adrci genezi uidrvci; do
+  [ -f "$f" ] && [ ! -L "$f" ] || continue
+  otool -L "$f" | awk '/\/ade\//{print $1}' | while read -r dep; do
+    install_name_tool -change "$dep" "@loader_path/$(basename "$dep")" "$f" 2>/dev/null
+  done
+  case "$f" in *.dylib*) install_name_tool -id "$CLIENTE/$f" "$f" 2>/dev/null || true ;; esac
+done
+$X86 ./genezi -v | grep -q "Instant Client mode" || { echo "Instant Client no quedó operativo"; exit 1; }
 echo "Instant Client en $CLIENTE"
 
 # 3. Python x86_64 y entorno virtual ---------------------------------------------------------------
@@ -90,8 +100,9 @@ echo "Escrito $BACKEND/.env"
 
 # 5. Prueba de conexión ----------------------------------------------------------------------------
 paso "Prueba de conexión"
-$X86 .venv-x86/bin/python probar_conexion.py
+# El cliente 11.2 abre libociei.dylib (zonas horarias) solo por nombre: sin esta ruta falla con ORA-01804.
+# arch borra las variables DYLD_*, por eso se pasan con -e.
+arch -x86_64 -e DYLD_FALLBACK_LIBRARY_PATH="$CLIENTE:/usr/local/lib:/usr/lib" .venv-x86/bin/python probar_conexion.py
 
 printf '\nListo. Para iniciar el backend contra Oracle 10g:\n'
-echo "  cd Codigo/backend"
-echo "  $X86 .venv-x86/bin/uvicorn app.main:create_app --factory --port 8000"
+echo "  bash Oracle10g/iniciar_backend_macos.sh"

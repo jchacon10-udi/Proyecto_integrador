@@ -46,6 +46,7 @@ Oracle 10g solo acepta el modo *thick* de python-oracledb con **Oracle Instant C
 ```
 powershell -ExecutionPolicy Bypass -File Oracle10g\instalar_cliente_windows.ps1   # Windows
 bash Oracle10g/instalar_cliente_macos.sh                                         # macOS
+bash Oracle10g/iniciar_backend_macos.sh                                          # macOS: iniciar el backend
 ```
 
 `python probar_conexion.py` (en `Codigo/backend`) verifica la conexión en cualquier momento. Instrucciones completas y errores frecuentes en [`Oracle10g/LEEME.md`](Oracle10g/LEEME.md).
